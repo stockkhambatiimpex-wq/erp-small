@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
+import { SelectField } from '../components/SelectField.jsx'
 
 function monthKey(date) {
   const y = date.getFullYear()
@@ -41,6 +42,8 @@ export function ReportsPage() {
     const end = new Date(y, m, 1, 0, 0, 0)
     return { start, end }
   }, [month])
+
+  const maxMonth = useMemo(() => monthKey(new Date()), [])
 
   useEffect(() => {
     let cancelled = false
@@ -106,24 +109,21 @@ export function ReportsPage() {
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <label className="field" style={{ flex: '1 1 220px' }}>
             <div className="label">Warehouse</div>
-            <select
+            <SelectField
               value={warehouseId}
-              onChange={(e) => setWarehouseId(e.target.value)}
-              style={{ width: '100%' }}
-            >
-              <option value="">All warehouses</option>
-              {(warehouses ?? []).map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => setWarehouseId(v)}
+              options={[
+                { value: '', label: 'All warehouses' },
+                ...(warehouses ?? []).map((w) => ({ value: w.id, label: w.name })),
+              ]}
+            />
           </label>
           <label className="field" style={{ flex: '0 0 180px' }}>
             <div className="label">Month</div>
             <input
               type="month"
               value={month}
+              max={maxMonth}
               onChange={(e) => setMonth(e.target.value)}
               style={{ width: '100%' }}
             />
@@ -134,36 +134,36 @@ export function ReportsPage() {
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <label className="field" style={{ flex: '1 1 260px' }}>
             <div className="label">Product</div>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
-              <option value="">All products</option>
-              {filterOptions.products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              value={productId}
+              onChange={(v) => setProductId(v)}
+              options={[
+                { value: '', label: 'All products' },
+                ...filterOptions.products.map((p) => ({ value: p.id, label: p.name })),
+              ]}
+            />
           </label>
           <label className="field" style={{ flex: '1 1 200px' }}>
             <div className="label">Brand</div>
-            <select value={brand} onChange={(e) => setBrand(e.target.value)}>
-              <option value="">All brands</option>
-              {filterOptions.brands.map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              value={brand}
+              onChange={(v) => setBrand(v)}
+              options={[
+                { value: '', label: 'All brands' },
+                ...filterOptions.brands.map((b) => ({ value: b, label: b })),
+              ]}
+            />
           </label>
           <label className="field" style={{ flex: '1 1 200px' }}>
             <div className="label">Category</div>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option value="">All categories</option>
-              {filterOptions.categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            <SelectField
+              value={category}
+              onChange={(v) => setCategory(v)}
+              options={[
+                { value: '', label: 'All categories' },
+                ...filterOptions.categories.map((c) => ({ value: c, label: c })),
+              ]}
+            />
           </label>
         </div>
 
@@ -174,7 +174,68 @@ export function ReportsPage() {
         ) : null}
 
         <div style={{ height: 14 }} />
-        <div style={{ overflowX: 'auto' }}>
+        <div className="reportMobileList">
+          {(filteredLines ?? []).map((l) => {
+            const qtyIn = Number(l.qty_in || 0)
+            const qtyOut = Number(l.qty_out || 0)
+            const net = Number(l.net || 0)
+            return (
+              <div key={l.product_id} className="reportCard">
+                <div className="reportTop">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="reportName">{l.name}</div>
+                    <div className="reportSub">
+                      <span className="pill">{l.sku || '—'}</span>
+                      <span className="pill">{l.unit || '—'}</span>
+                      {(l.brand_name || '').trim() ? (
+                        <span className="pill">{(l.brand_name || '').trim()}</span>
+                      ) : null}
+                      {l.category ? <span className="pill">{l.category}</span> : null}
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: 'var(--mono)',
+                      color: net >= 0 ? 'var(--ok)' : 'var(--low)',
+                      fontWeight: 900,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {net >= 0 ? '+' : ''}
+                    {net.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="reportNumbers">
+                  <div className="reportNum">
+                    <div className="label">In</div>
+                    <div style={{ color: 'var(--ok)', fontFamily: 'var(--mono)' }}>
+                      {qtyIn.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div className="reportNum">
+                    <div className="label">Out</div>
+                    <div style={{ color: 'var(--low)', fontFamily: 'var(--mono)' }}>
+                      {qtyOut.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                  <div className="reportNum">
+                    <div className="label">Net</div>
+                    <div style={{ fontFamily: 'var(--mono)' }}>
+                      {net.toLocaleString('en-IN')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {!busy && (filteredLines?.length ?? 0) === 0 ? (
+            <div style={{ color: 'var(--muted)' }}>No movements for this month.</div>
+          ) : null}
+        </div>
+
+        <div className="reportDesktopTable" style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
             <thead>
               <tr>
@@ -188,7 +249,7 @@ export function ReportsPage() {
             </thead>
             <tbody>
               {(filteredLines ?? []).map((l) => (
-                <tr key={l.product_id}>
+                <tr key={`${l.product_id}-desktop`}>
                   <Td mono muted>
                     {l.sku || '—'}
                   </Td>

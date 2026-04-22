@@ -5,6 +5,7 @@ import { DashboardPage } from '../screens/DashboardPage.jsx'
 import { ProductsPage } from '../screens/ProductsPage.jsx'
 import { WarehousesPage } from '../screens/WarehousesPage.jsx'
 import { ReportsPage } from '../screens/ReportsPage.jsx'
+import { AnalysisPage } from '../screens/AnalysisPage.jsx'
 
 export function AppRouter() {
   return (
@@ -18,6 +19,7 @@ export function AppRouter() {
         <Route path="products" element={<ProductsPage />} />
         <Route path="warehouses" element={<WarehousesPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="analysis" element={<AnalysisPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

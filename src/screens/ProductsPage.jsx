@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { useAuth } from '../state/AuthProvider.jsx'
+import { SelectField } from '../components/SelectField.jsx'
 
 export function ProductsPage() {
   const { isEditor } = useAuth()
@@ -36,15 +37,55 @@ export function ProductsPage() {
       .limit(250)
 
     if (brandId) query.eq('brand_id', brandId)
-    if (q.trim()) query.ilike('name', `%${q.trim()}%`)
+    if (q.trim()) {
+      const term = q.trim()
+      query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
+    }
 
     const { data, error: e } = await query
-    setBusy(false)
     if (e) {
+      setBusy(false)
       setError(e.message)
       return
     }
-    setRows(data ?? [])
+    const products = data ?? []
+    const ids = products.map((p) => p.id).filter(Boolean)
+    if (ids.length === 0) {
+      setBusy(false)
+      setRows([])
+      return
+    }
+
+    const { data: stockRows, error: sErr } = await supabase
+      .from('v_current_stock')
+      .select('product_id,warehouse_id,qty')
+      .in('product_id', ids)
+
+    setBusy(false)
+    if (sErr) {
+      setError(sErr.message)
+      setRows(products)
+      return
+    }
+
+    const byProduct = {}
+    for (const r of stockRows ?? []) {
+      const pid = r.product_id
+      if (!pid) continue
+      const wh = r.warehouse_id
+      const qty = Number(r.qty || 0)
+      if (!byProduct[pid]) byProduct[pid] = { total: 0, byWarehouse: {} }
+      byProduct[pid].total += qty
+      if (wh) byProduct[pid].byWarehouse[wh] = qty
+    }
+
+    setRows(
+      products.map((p) => ({
+        ...p,
+        stock_total: byProduct[p.id]?.total ?? 0,
+        stock_by_warehouse: byProduct[p.id]?.byWarehouse ?? {},
+      })),
+    )
   }
 
   async function deleteProduct(product) {
@@ -86,7 +127,7 @@ export function ProductsPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search product…"
+            placeholder="Search product or SKU"
             style={inputStyle}
           />
           <select
@@ -118,84 +159,88 @@ export function ProductsPage() {
         ) : null}
 
         <div style={{ height: 14 }} />
-        <div style={{ overflowX: 'auto' }}>
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <Th>SKU</Th>
-                <Th>Name</Th>
-                <Th>Brand</Th>
-                <Th>Category</Th>
-                <Th>Unit</Th>
-                <Th>Min</Th>
-                <Th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((p) => (
-                <tr key={p.id}>
-                  <Td mono muted>
-                    {p.sku || '—'}
-                  </Td>
-                  <Td>
-                    <div style={{ fontWeight: 800 }}>{p.name}</div>
-                    {p.notes ? (
-                      <div style={{ color: 'var(--muted)', marginTop: 2 }}>
-                        {p.notes}
-                      </div>
-                    ) : null}
-                  </Td>
-                  <Td>{p.brand?.name || '—'}</Td>
-                  <Td muted>{p.category || '—'}</Td>
-                  <Td muted>{p.unit || '—'}</Td>
-                  <Td mono muted>
-                    {p.min_qty ?? 0}
-                  </Td>
-                  <Td>
-                    <div style={{ display: 'flex', gap: 8, justifyContent: 'end' }}>
-                      {isEditor ? (
-                        <button
-                          className="btn"
-                          onClick={() => setAdj({ open: true, product: p })}
-                        >
-                          Adjust stock
-                        </button>
-                      ) : null}
-                      {isEditor ? (
-                        <button
-                          className="btn btnGhost"
-                          onClick={() =>
-                            setModal({ open: true, mode: 'edit', item: p })
-                          }
-                        >
-                          Edit
-                        </button>
-                      ) : null}
-                      {isEditor ? (
-                        <button className="btn btnGhost" onClick={() => deleteProduct(p)}>
-                          Delete
-                        </button>
-                      ) : null}
+        <div className="productGrid">
+          {rows.map((p) => {
+            const total = Number(p.stock_total || 0)
+            const min = Number(p.min_qty || 0)
+            const isLow = min > 0 && total < min
+            return (
+              <div key={p.id} className="productCard">
+                <div className="productCardTop">
+                  <div style={{ minWidth: 0 }}>
+                    <div className="productName">{p.name}</div>
+                    <div className="productMeta">
+                      <span className="pill">{p.sku || '—'}</span>
+                      <span className="pill">{p.brand?.name || '—'}</span>
+                      <span className="pill">{p.category || '—'}</span>
+                      <span className="pill">{p.unit || '—'}</span>
                     </div>
-                  </Td>
-                </tr>
-              ))}
-              {rows.length === 0 && !busy ? (
-                <tr>
-                  <Td colSpan={7} muted>
-                    No products found.
-                  </Td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+                  </div>
+                  <div className={`stockBadge ${isLow ? 'low' : 'ok'}`}>
+                    {isLow ? 'Low' : 'OK'}
+                  </div>
+                </div>
+
+                <div className="productStockLine">
+                  <div className="stockTotal">
+                    {total.toLocaleString('en-IN')} {p.unit || ''}
+                  </div>
+                  <div className="stockMin">
+                    Min: {min.toLocaleString('en-IN')}
+                  </div>
+                </div>
+
+                <div className="whChips">
+                  {(warehouses ?? []).map((w) => {
+                    const q = Number(p.stock_by_warehouse?.[w.id] || 0)
+                    return (
+                      <div key={w.id} className={`whChip ${q > 0 ? 'has' : ''}`}>
+                        {w.name}: {q}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {p.notes ? <div className="productNotes">{p.notes}</div> : null}
+
+                <div className="productActions">
+                  {isEditor ? (
+                    <button className="btn btnIcon" onClick={() => setAdj({ open: true, product: p })}>
+                      +
+                    </button>
+                  ) : null}
+                  {isEditor ? (
+                    <button
+                      className="btn btnIcon"
+                      onClick={() => setModal({ open: true, mode: 'edit', item: p })}
+                      aria-label="Edit"
+                    >
+                      ✎
+                    </button>
+                  ) : null}
+                  {isEditor ? (
+                    <button
+                      className="btn btnIcon btnDanger"
+                      onClick={() => deleteProduct(p)}
+                      aria-label="Delete"
+                    >
+                      ✕
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            )
+          })}
+
+          {rows.length === 0 && !busy ? (
+            <div style={{ color: 'var(--muted)' }}>No products found.</div>
+          ) : null}
         </div>
       </div>
 
       {modal.open ? (
         <ProductModal
           brands={brands}
-          warehouses={warehouses}
           mode={modal.mode}
           item={modal.item}
           onClose={() => setModal({ open: false, mode: 'add', item: null })}
@@ -233,7 +278,7 @@ const CATEGORY_OPTIONS = [
   'Other',
 ]
 
-function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
+function ProductModal({ brands, mode, item, onClose, onSaved }) {
   const { isEditor } = useAuth()
   const [sku, setSku] = useState(item?.sku || '')
   const [name, setName] = useState(item?.name || '')
@@ -242,8 +287,6 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
   const [minQty, setMinQty] = useState(item?.min_qty ?? 0)
   const [notes, setNotes] = useState(item?.notes || '')
   const [brandId, setBrandId] = useState(item?.brand?.id || '')
-  const [warehouseId, setWarehouseId] = useState(item?.warehouse_id || '')
-  const [openingQty, setOpeningQty] = useState(0)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -263,7 +306,8 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
       min_qty: Number(minQty || 0),
       notes: notes.trim() || null,
       brand_id: brandId || null,
-      warehouse_id: warehouseId || null,
+      // Products are global. Stock is tracked per-warehouse in stock movements.
+      warehouse_id: null,
     }
 
     const res =
@@ -277,24 +321,6 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
       return
     }
 
-    // On create, optionally set opening stock for a selected warehouse.
-    if (mode !== 'edit') {
-      const created = res.data?.[0]
-      const qty = Number(openingQty || 0)
-      if (created?.id && warehouseId && Number.isFinite(qty) && qty >= 0) {
-        const { error: mErr } = await supabase.from('stock_movements').insert({
-          product_id: created.id,
-          warehouse_id: warehouseId,
-          type: 'set',
-          qty,
-          remark: 'Opening stock',
-        })
-        if (mErr) {
-          setError(mErr.message)
-          return
-        }
-      }
-    }
     onSaved()
   }
 
@@ -316,14 +342,15 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
         </label>
         <label className="field">
           <div className="label">Brand</div>
-          <select value={brandId} onChange={(e) => setBrandId(e.target.value)}>
-            <option value="">Select</option>
-            {(brands ?? []).map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            value={brandId}
+            onChange={(v) => setBrandId(v)}
+            placeholder="Select"
+            options={[
+              { value: '', label: 'Select' },
+              ...(brands ?? []).map((b) => ({ value: b.id, label: b.name })),
+            ]}
+          />
         </label>
       </div>
       <label className="field">
@@ -337,26 +364,25 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
       <div className="modalGrid2">
         <label className="field">
           <div className="label">Category</div>
-          <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            <option value="">Select</option>
-            {CATEGORY_OPTIONS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <SelectField
+            value={category}
+            onChange={(v) => setCategory(v)}
+            placeholder="Select"
+            options={[
+              { value: '', label: 'Select' },
+              ...CATEGORY_OPTIONS.map((c) => ({ value: c, label: c })),
+            ]}
+          />
         </label>
         <label className="field">
           <div className="label">Unit</div>
-          <select value={unit} onChange={(e) => setUnit(e.target.value)}>
-            {['Pcs', 'Bags', 'Litres', 'Kgs', 'Rolls', 'Boxes', 'Drums', 'Sheets', 'Bundle'].map(
-              (u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ),
+          <SelectField
+            value={unit}
+            onChange={(v) => setUnit(v)}
+            options={['Pcs', 'Bags', 'Litres', 'Kgs', 'Rolls', 'Boxes', 'Drums', 'Sheets', 'Bundle'].map(
+              (u) => ({ value: u, label: u }),
             )}
-          </select>
+          />
         </label>
       </div>
       <div className="modalGrid2">
@@ -379,34 +405,6 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
         </label>
       </div>
 
-      <div className="modalGrid2">
-        <label className="field">
-          <div className="label">Warehouse</div>
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-            <option value="">Select</option>
-            {(warehouses ?? []).map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {mode !== 'edit' ? (
-          <label className="field">
-            <div className="label">Current qty *</div>
-            <input
-              type="number"
-              min={0}
-              value={openingQty}
-              onChange={(e) => setOpeningQty(e.target.value)}
-              placeholder="0"
-            />
-          </label>
-        ) : (
-          <div />
-        )}
-      </div>
-
       <div className="modalFooter">
         <button className="btn" onClick={onClose}>
           Cancel
@@ -414,7 +412,7 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
         <button
           className="btn btnPrimary btnWidePrimary"
           onClick={save}
-          disabled={busy || !isEditor || !warehouseId}
+          disabled={busy || !isEditor}
         >
           {busy ? 'Saving…' : mode === 'edit' ? 'Save Changes' : 'Save Product'}
         </button>
@@ -425,12 +423,58 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
 
 function AdjustModal({ product, warehouses, onClose, onApplied }) {
   const { isEditor } = useAuth()
-  const [warehouseId, setWarehouseId] = useState(warehouses?.[0]?.id || '')
-  const [type, setType] = useState('add')
-  const [qty, setQty] = useState(1)
-  const [remark, setRemark] = useState('')
+  const [currentByWarehouse, setCurrentByWarehouse] = useState({})
+  const [ops, setOps] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadCurrent() {
+      if (!product?.id) return
+      const { data, error: e } = await supabase
+        .from('v_current_stock')
+        .select('warehouse_id,qty')
+        .eq('product_id', product.id)
+      if (cancelled) return
+      if (e) {
+        setError(e.message)
+        return
+      }
+      const map = {}
+      for (const row of data ?? []) map[row.warehouse_id] = Number(row.qty || 0)
+      setCurrentByWarehouse(map)
+    }
+    loadCurrent()
+    return () => {
+      cancelled = true
+    }
+  }, [product?.id])
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setOps((prev) => {
+      const byId = new Map((prev ?? []).map((o) => [o.warehouse_id, o]))
+      return (warehouses ?? []).map((w) => {
+        const existing = byId.get(w.id)
+        return (
+          existing ?? {
+            warehouse_id: w.id,
+            type: 'add',
+            qty: '',
+            remark: '',
+            touched: false,
+          }
+        )
+      })
+    })
+  }, [warehouses])
+
+  const totals = useMemo(() => {
+    let total = 0
+    for (const w of warehouses ?? []) total += Number(currentByWarehouse?.[w.id] || 0)
+    return { total }
+  }, [currentByWarehouse, warehouses])
 
   async function apply() {
     if (!isEditor) {
@@ -438,46 +482,43 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
       return
     }
     setError('')
-    if (!warehouseId) {
-      setError('Select a warehouse.')
-      return
-    }
-    const val = Number(qty || 0)
-    if (!Number.isFinite(val) || val < 0) {
-      setError('Quantity must be 0 or more.')
-      return
+    const movements = []
+    for (const o of ops ?? []) {
+      if (!o?.warehouse_id) continue
+      if (!o.touched) continue
+      const val = Number(o.qty || 0)
+      if (!Number.isFinite(val) || val < 0) {
+        setError('Quantity must be 0 or more.')
+        return
+      }
+      if (o.type !== 'set' && val <= 0) continue
+      if (o.type === 'sub') {
+        const current = Number(currentByWarehouse?.[o.warehouse_id] || 0)
+        if (current <= 0) {
+          setError('Cannot remove stock: current quantity is 0.')
+          return
+        }
+        if (val > current) {
+          setError(`Cannot remove ${val}. Current quantity is ${current}.`)
+          return
+        }
+      }
+      movements.push({
+        product_id: product.id,
+        warehouse_id: o.warehouse_id,
+        type: o.type,
+        qty: val,
+        remark: String(o.remark || '').trim() || null,
+      })
     }
 
-    if (type === 'sub') {
-      const { data, error: sErr } = await supabase
-        .from('v_current_stock')
-        .select('qty')
-        .eq('product_id', product.id)
-        .eq('warehouse_id', warehouseId)
-        .maybeSingle()
-      if (sErr) {
-        setError(sErr.message)
-        return
-      }
-      const current = Number(data?.qty || 0)
-      if (current <= 0) {
-        setError('Cannot remove stock: current quantity is 0.')
-        return
-      }
-      if (val > current) {
-        setError(`Cannot remove ${val}. Current quantity is ${current}.`)
-        return
-      }
+    if (movements.length === 0) {
+      setError('Enter at least one warehouse adjustment.')
+      return
     }
 
     setBusy(true)
-    const { error: e } = await supabase.from('stock_movements').insert({
-      product_id: product.id,
-      warehouse_id: warehouseId,
-      type,
-      qty,
-      remark: remark.trim() || null,
-    })
+    const { error: e } = await supabase.from('stock_movements').insert(movements)
     setBusy(false)
     if (e) {
       setError(e.message)
@@ -489,40 +530,105 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
   return (
     <Modal title={`Adjust stock · ${product.name}`} onClose={onClose}>
       {error ? <div className="error">{error}</div> : null}
-      <div className="modalGrid2">
-        <label className="field">
-          <div className="label">Warehouse</div>
-          <select value={warehouseId} onChange={(e) => setWarehouseId(e.target.value)}>
-            {(warehouses ?? []).map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <div className="label">Type</div>
-          <select value={type} onChange={(e) => setType(e.target.value)}>
-            <option value="add">Add stock (inward)</option>
-            <option value="sub">Remove stock (outward)</option>
-            <option value="set">Set exact qty</option>
-          </select>
-        </label>
+      <div style={{ color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
+        Total stock (all warehouses): {Number(totals.total || 0).toLocaleString('en-IN')}
       </div>
-      <div className="modalGrid2">
-        <label className="field">
-          <div className="label">Quantity</div>
-          <input
-            type="number"
-            min={0}
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-          />
-        </label>
-        <label className="field">
-          <div className="label">Remark (optional)</div>
-          <input value={remark} onChange={(e) => setRemark(e.target.value)} />
-        </label>
+      <div style={{ height: 10 }} />
+      <div style={{ display: 'grid', gap: 10 }}>
+        {(warehouses ?? []).map((w) => {
+          const current = Number(currentByWarehouse?.[w.id] || 0)
+          const o = (ops ?? []).find((x) => x.warehouse_id === w.id) ?? {
+            warehouse_id: w.id,
+            type: 'add',
+            qty: '',
+            remark: '',
+            touched: false,
+          }
+          return (
+            <div
+              key={w.id}
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 14,
+                padding: 12,
+                display: 'grid',
+                gap: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ fontWeight: 900 }}>{w.name}</div>
+                <div style={{ color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
+                  Current: {Number(current || 0).toLocaleString('en-IN')}
+                </div>
+              </div>
+
+              <div className="modalGrid2">
+                <label className="field">
+                  <div className="label">Type</div>
+                  <SelectField
+                    value={o.type}
+                    onChange={(v) =>
+                      setOps((prev) =>
+                        (prev ?? []).map((x) =>
+                          x.warehouse_id === w.id ? { ...x, type: v, touched: true } : x,
+                        ),
+                      )
+                    }
+                    options={[
+                      { value: 'add', label: 'Add stock (inward)' },
+                      { value: 'sub', label: 'Remove stock (outward)' },
+                      { value: 'set', label: 'Set exact qty' },
+                    ]}
+                  />
+                </label>
+                <label className="field">
+                  <div className="label">Quantity</div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={o.qty}
+                    onChange={(e) =>
+                      setOps((prev) =>
+                        (prev ?? []).map((x) =>
+                          x.warehouse_id === w.id
+                            ? { ...x, qty: e.target.value, touched: true }
+                            : x,
+                        ),
+                      )
+                    }
+                    placeholder="0"
+                  />
+                </label>
+              </div>
+              <label className="field">
+                <div className="label">Remark (optional)</div>
+                <input
+                  value={o.remark}
+                  onChange={(e) =>
+                    setOps((prev) =>
+                      (prev ?? []).map((x) =>
+                        x.warehouse_id === w.id
+                          ? { ...x, remark: e.target.value, touched: true }
+                          : x,
+                      ),
+                    )
+                  }
+                  placeholder="Optional note"
+                />
+              </label>
+            </div>
+          )
+        })}
+        {(warehouses?.length ?? 0) === 0 ? (
+          <div style={{ color: 'var(--muted)' }}>No warehouses found.</div>
+        ) : null}
       </div>
 
       <div className="modalFooter">
@@ -601,11 +707,5 @@ const inputStyle = {
   padding: '10px 12px',
   borderRadius: 10,
   outline: 'none',
-}
-
-const tableStyle = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  minWidth: 860,
 }
 

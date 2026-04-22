@@ -106,9 +106,10 @@ export function WarehousesPage() {
                 display: 'flex',
                 justifyContent: 'space-between',
                 gap: 12,
+                flexWrap: 'wrap',
               }}
             >
-              <div style={{ display: 'grid', gap: 6, flex: 1 }}>
+              <div style={{ display: 'grid', gap: 6, flex: '1 1 260px', minWidth: 0 }}>
                 {isEditor ? (
                   <input
                     defaultValue={w.name}
@@ -126,7 +127,8 @@ export function WarehousesPage() {
                       borderRadius: 10,
                       outline: 'none',
                       fontWeight: 800,
-                      maxWidth: 420,
+                      width: '100%',
+                      maxWidth: 520,
                     }}
                   />
                 ) : (
@@ -138,7 +140,7 @@ export function WarehousesPage() {
               </div>
 
               {isEditor ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
                   <button
                     className="btn btnGhost"
                     disabled={busyId === w.id}

@@ -44,6 +44,9 @@ export function AppShell() {
           <NavLink to="/reports" className="navItem">
             Monthly report
           </NavLink>
+          <NavLink to="/analysis" className="navItem">
+            Analysis
+          </NavLink>
         </nav>
         <main className="content">
           <Outlet />

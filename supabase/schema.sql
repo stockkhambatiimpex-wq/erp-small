@@ -193,14 +193,13 @@ as $$
   with s as (
     select
       p.id as product_id,
-      coalesce(cs.qty, 0) as total_qty,
+      coalesce(sum(cs.qty), 0) as total_qty,
       max(p.min_qty) as min_qty
     from public.products p
     left join public.v_current_stock cs
       on cs.product_id = p.id
-      and cs.warehouse_id = p.warehouse_id
     where p.active = true
-    group by p.id, cs.qty
+    group by p.id
   )
   select
     (select count(*) from public.products where active = true),
@@ -250,18 +249,19 @@ as $$
   left join public.brands b on b.id = p.brand_id
   left join public.stock_movements m
     on m.product_id = p.id
-    and m.warehouse_id = p_warehouse_id
+    and (p_warehouse_id is null or m.warehouse_id = p_warehouse_id)
     and m.created_at >= p_start
     and m.created_at < p_end
   left join lateral (
     select cs.qty
     from public.v_current_stock cs
-    where cs.product_id = p.id and cs.warehouse_id = p_warehouse_id and cs.as_of < m.created_at
+    where cs.product_id = p.id
+      and cs.warehouse_id = m.warehouse_id
+      and cs.as_of < m.created_at
     order by cs.as_of desc
     limit 1
   ) prev on true
   where p.active = true
-    and p.warehouse_id = p_warehouse_id
   group by p.id, p.sku, p.name, p.category, p.unit, b.name
   order by p.name asc;
 $$;

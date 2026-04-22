@@ -1,13 +1,18 @@
 :root {
-  --bg: #0f0e0c;
-  --surface: #1a1916;
-  --card: #222018;
-  --border: #2e2b24;
-  --accent: #e8a832;
-  --ok: #4fc38a;
-  --low: #e85f32;
-  --text: #f0ece0;
-  --muted: #7a7464;
+  --bg: #0d1117;
+  --surface: #161b22;
+  --card: #1c2330;
+  --border: #30363d;
+
+  --accent: #f0a500;
+
+  --ok: #3fb950;
+  --low: #d29922;
+  --danger: #f85149;
+
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --faint: #484f58;
   --mono: ui-monospace, Consolas, 'DM Mono', monospace;
   --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
@@ -56,7 +61,7 @@ button {
 .btnPrimary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #0f0e0c;
+  color: #0d1117;
   font-weight: 700;
 }
 .btnGhost {
@@ -70,7 +75,7 @@ button {
 }
 
 .topbar {
-  height: 64px;
+  min-height: 64px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -96,10 +101,15 @@ button {
 .who {
   text-align: right;
   line-height: 1.1;
+  min-width: 0;
 }
 .whoName {
   font-weight: 700;
   font-size: 13px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .whoRole {
   font-family: var(--mono);
@@ -114,7 +124,7 @@ button {
 }
 .sidebar {
   border-right: 1px solid var(--border);
-  background: rgba(26, 25, 22, 0.65);
+  background: rgba(22, 27, 34, 0.65);
   backdrop-filter: blur(6px);
   padding: 14px;
   display: flex;
@@ -131,7 +141,7 @@ button {
 .navItem.active {
   color: var(--text);
   border-color: var(--border);
-  background: rgba(232, 168, 50, 0.06);
+  background: rgba(240, 165, 0, 0.08);
 }
 .content {
   padding: 18px;
@@ -151,8 +161,189 @@ button {
   padding: 14px;
 }
 
+/* Product cards */
+.productGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.productCard {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0))
+    rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.productCardTop {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.productName {
+  font-weight: 950;
+  letter-spacing: -0.2px;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.productMeta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pill {
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.stockBadge {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.stockBadge.ok {
+  background: rgba(63, 185, 80, 0.1);
+  border-color: rgba(63, 185, 80, 0.35);
+  color: var(--ok);
+}
+.stockBadge.low {
+  background: rgba(210, 153, 34, 0.12);
+  border-color: rgba(210, 153, 34, 0.35);
+  color: var(--low);
+}
+.productStockLine {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stockTotal {
+  font-weight: 900;
+  font-size: 18px;
+  color: var(--text);
+}
+.stockMin {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.whChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.whChip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+}
+.whChip.has {
+  color: var(--text);
+  background: rgba(240, 165, 0, 0.1);
+  border-color: rgba(240, 165, 0, 0.28);
+}
+.productNotes {
+  color: var(--muted);
+}
+.productActions {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
+  margin-top: auto;
+}
+.btnIcon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+}
+.btnDanger {
+  border-color: rgba(248, 81, 73, 0.4);
+  background: rgba(248, 81, 73, 0.12);
+  color: var(--text);
+}
+
+/* Monthly report responsive */
+.reportMobileList {
+  display: none;
+}
+.reportDesktopTable {
+  display: block;
+}
+.reportCard {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  display: grid;
+  gap: 10px;
+}
+.reportTop {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.reportName {
+  font-weight: 900;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reportSub {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.reportNumbers {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.reportNum {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* Analysis */
+.analysisGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.analysisCard {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
 .auth {
   min-height: 100vh;
+  min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 16px;
@@ -203,8 +394,8 @@ button {
   border-color: var(--accent);
 }
 .error {
-  background: rgba(232, 95, 50, 0.12);
-  border: 1px solid rgba(232, 95, 50, 0.35);
+  background: rgba(248, 81, 73, 0.14);
+  border: 1px solid rgba(248, 81, 73, 0.4);
   padding: 10px 12px;
   border-radius: 10px;
   color: var(--text);
@@ -219,16 +410,23 @@ button {
   place-items: center;
   padding: 16px;
   z-index: 100;
+  overflow: auto;
 }
 .modalCard {
   width: 760px;
   max-width: 100%;
+  width: min(760px, calc(100vw - 32px));
+  width: min(760px, calc(100dvw - 32px));
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0))
     var(--surface);
   border: 1px solid var(--border);
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
 }
 .modalHeader {
   padding: 18px 18px 14px;
@@ -237,6 +435,7 @@ button {
   align-items: start;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 .modalTitle {
   font-weight: 950;
@@ -251,6 +450,10 @@ button {
   padding: 16px 18px 18px;
   display: grid;
   gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .modalGrid2 {
   display: grid;
@@ -267,6 +470,103 @@ button {
   border-radius: 10px;
   outline: none;
 }
+.field select {
+  color-scheme: dark;
+  -webkit-tap-highlight-color: transparent;
+}
+.field select option {
+  background: var(--surface);
+  color: var(--text);
+}
+.field select option:disabled {
+  color: var(--muted);
+}
+
+/* Custom select (mobile-friendly) */
+.cselect {
+  position: relative;
+}
+.cselectBtn {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 10px;
+  outline: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+.cselectBtn:focus {
+  border-color: var(--accent);
+}
+.cselect.isDisabled .cselectBtn {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+.cselectText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.cselectText.isPlaceholder {
+  color: var(--muted);
+}
+.cselectChevron {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+.cselectMenu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin-top: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: auto;
+  max-height: 280px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  z-index: 30;
+}
+.cselectOption {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+}
+.cselectOption:hover {
+  background: rgba(240, 165, 0, 0.12);
+}
+.cselectOption:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.cselectOption.isSelected {
+  background: rgba(240, 165, 0, 0.18);
+}
+.cselectOptionLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.cselectCheck {
+  font-family: var(--mono);
+  color: var(--accent);
+}
 .field textarea {
   min-height: 44px;
   resize: vertical;
@@ -281,8 +581,13 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   background: rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+}
+.modalFooter .btn {
+  flex: 0 1 auto;
 }
 .btnWidePrimary {
   padding: 14px 18px;
@@ -290,6 +595,7 @@ button {
   min-width: 240px;
   font-weight: 900;
   letter-spacing: 0.2px;
+  max-width: 100%;
 }
 
 @media (max-width: 720px) {
@@ -304,11 +610,41 @@ button {
     flex-direction: column-reverse;
     align-items: stretch;
   }
+
+  .productGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .reportMobileList {
+    display: grid;
+    gap: 10px;
+  }
+  .reportDesktopTable {
+    display: none;
+  }
+
+  .analysisGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  /* Ensure modal footer never cuts on small tablets */
+  .modalFooter {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .btnWidePrimary {
+    min-width: 0;
+    width: 100%;
+  }
 }
 .authHint {
   margin-top: 14px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 860px) {
@@ -324,5 +660,82 @@ button {
   }
   .content {
     padding: 14px;
+  }
+
+  .productGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 980px) {
+  /* Treat small tablets like mobile for layout stability */
+  .productGrid {
+    grid-template-columns: 1fr;
+  }
+  .analysisGrid {
+    grid-template-columns: 1fr;
+  }
+  .topbar {
+    padding: 10px 12px;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .topbarRight {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: 100%;
+  }
+  .brand {
+    font-size: 14px;
+  }
+  .whoName {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .authCard {
+    padding: 16px;
+    border-radius: 18px;
+  }
+  .authForm .btn {
+    width: 100%;
+  }
+  .modalHeader {
+    padding: 14px 14px 12px;
+  }
+  .modalBody {
+    padding: 12px 14px 14px;
+  }
+  .modalFooter {
+    padding: 12px 14px 14px;
+  }
+  .modalFooter .btn {
+    width: 100%;
+  }
+  .modalTitle {
+    font-size: 18px;
+  }
+  .modalSubtitle {
+    font-size: 12px;
+  }
+  .btnIcon {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Very short viewports (landscape / small screens): avoid clipping by centering */
+@media (max-height: 700px) {
+  .auth {
+    place-items: start center;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  .modalOverlay {
+    place-items: start center;
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 }
