@@ -347,10 +347,13 @@ button {
   display: grid;
   place-items: center;
   padding: 16px;
+  overflow: auto;
 }
 .authCard {
   width: 420px;
   max-width: 100%;
+  width: min(420px, calc(100vw - 32px));
+  width: min(420px, calc(100dvw - 32px));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -657,9 +660,29 @@ button {
     gap: 8px;
     border-right: none;
     border-bottom: 1px solid var(--border);
+    align-items: center;
+    padding: 10px 12px;
+    height: 60px;
+    box-sizing: border-box;
+    scrollbar-width: none; /* Firefox */
+  }
+  .sidebar::-webkit-scrollbar {
+    height: 0;
+  }
+  .navItem {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+    height: 40px;
+    padding: 0 12px;
+    line-height: 1;
   }
   .content {
-    padding: 14px;
+    padding: 12px 14px 14px;
+  }
+  .pageTitle {
+    margin-top: 0;
   }
 
   .productGrid {
@@ -695,6 +718,11 @@ button {
 }
 
 @media (max-width: 520px) {
+  .auth {
+    place-items: center;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
   .authCard {
     padding: 16px;
     border-radius: 18px;
