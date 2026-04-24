@@ -1,9 +1,27 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../state/AuthProvider.jsx'
 
 export function AppShell() {
   const nav = useNavigate()
+  const loc = useLocation()
+  const sidebarRef = useRef(null)
   const { profile, signOut, isEditor, user } = useAuth()
+
+  useEffect(() => {
+    // Guest users can access only Products.
+    if (!user && loc.pathname !== '/products') {
+      nav('/products', { replace: true })
+    }
+  }, [loc.pathname, nav, user])
+
+  useEffect(() => {
+    const el = sidebarRef.current
+    if (!el) return
+    const active = el.querySelector?.('.navItem.active')
+    if (!active?.scrollIntoView) return
+    active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  }, [loc.pathname])
 
   return (
     <div className="app">
@@ -31,22 +49,26 @@ export function AppShell() {
       </header>
 
       <div className="body">
-        <nav className="sidebar">
-          <NavLink to="/" end className="navItem">
-            Dashboard
-          </NavLink>
+        <nav className="sidebar" ref={sidebarRef}>
           <NavLink to="/products" className="navItem">
             Products
           </NavLink>
-          <NavLink to="/warehouses" className="navItem">
-            Warehouses
-          </NavLink>
-          <NavLink to="/reports" className="navItem">
-            Monthly report
-          </NavLink>
-          <NavLink to="/analysis" className="navItem">
-            Analysis
-          </NavLink>
+          {user ? (
+            <>
+              <NavLink to="/" end className="navItem">
+                Dashboard
+              </NavLink>
+              <NavLink to="/warehouses" className="navItem">
+                Warehouses
+              </NavLink>
+              <NavLink to="/reports" className="navItem">
+                Monthly report
+              </NavLink>
+              <NavLink to="/analysis" className="navItem">
+                Analysis
+              </NavLink>
+            </>
+          ) : null}
         </nav>
         <main className="content">
           <Outlet />
