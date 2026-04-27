@@ -10,8 +10,8 @@ export function AppShell() {
 
   useEffect(() => {
     // Guest users can access only Products.
-    if (!user && loc.pathname !== '/products') {
-      nav('/products', { replace: true })
+    if (!user && loc.pathname !== '/') {
+      nav('/', { replace: true })
     }
   }, [loc.pathname, nav, user])
 
@@ -50,12 +50,12 @@ export function AppShell() {
 
       <div className="body">
         <nav className="sidebar" ref={sidebarRef}>
-          <NavLink to="/products" className="navItem">
+          <NavLink to="/" end className="navItem">
             Products
           </NavLink>
           {user ? (
             <>
-              <NavLink to="/" end className="navItem">
+              <NavLink to="/dashboard" className="navItem">
                 Dashboard
               </NavLink>
               <NavLink to="/warehouses" className="navItem">

@@ -15,8 +15,9 @@ export function AppRouter() {
         path="/"
         element={<AppShell />}
       >
-        <Route index element={<DashboardPage />} />
-        <Route path="products" element={<ProductsPage />} />
+        <Route index element={<ProductsPage />} />
+        <Route path="products" element={<Navigate to="/" replace />} />
+        <Route path="dashboard" element={<DashboardPage />} />
         <Route path="warehouses" element={<WarehousesPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="analysis" element={<AnalysisPage />} />

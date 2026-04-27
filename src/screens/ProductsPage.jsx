@@ -1,17 +1,20 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { useAuth } from '../state/AuthProvider.jsx'
 import { SelectField } from '../components/SelectField.jsx'
 
 export function ProductsPage() {
   const { isEditor } = useAuth()
+  const [qRaw, setQRaw] = useState('')
   const [q, setQ] = useState('')
   const [brandId, setBrandId] = useState('')
   const [brands, setBrands] = useState([])
-  const [rows, setRows] = useState([])
+  const [allRows, setAllRows] = useState([])
   const [warehouses, setWarehouses] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const qDebounceRef = useRef(null)
 
   const [modal, setModal] = useState({ open: false, mode: 'add', item: null })
   const [adj, setAdj] = useState({ open: false, product: null })
@@ -37,10 +40,7 @@ export function ProductsPage() {
       .limit(250)
 
     if (brandId) query.eq('brand_id', brandId)
-    if (q.trim()) {
-      const term = q.trim()
-      query.or(`name.ilike.%${term}%,sku.ilike.%${term}%`)
-    }
+    // Search is handled client-side (fuzzy + qty + suggestions), so we only filter on brand server-side.
 
     const { data, error: e } = await query
     if (e) {
@@ -52,7 +52,7 @@ export function ProductsPage() {
     const ids = products.map((p) => p.id).filter(Boolean)
     if (ids.length === 0) {
       setBusy(false)
-      setRows([])
+      setAllRows([])
       return
     }
 
@@ -64,7 +64,7 @@ export function ProductsPage() {
     setBusy(false)
     if (sErr) {
       setError(sErr.message)
-      setRows(products)
+      setAllRows(products)
       return
     }
 
@@ -79,7 +79,7 @@ export function ProductsPage() {
       if (wh) byProduct[pid].byWarehouse[wh] = qty
     }
 
-    setRows(
+    setAllRows(
       products.map((p) => ({
         ...p,
         stock_total: byProduct[p.id]?.total ?? 0,
@@ -112,24 +112,98 @@ export function ProductsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProducts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q, brandId])
+  }, [brandId])
 
   const brandOptions = useMemo(
     () => [{ id: '', name: 'All brands' }, ...(brands ?? [])],
     [brands],
   )
 
+  useEffect(() => {
+    if (qDebounceRef.current) window.clearTimeout(qDebounceRef.current)
+    qDebounceRef.current = window.setTimeout(() => setQ(qRaw), 160)
+    return () => {
+      if (qDebounceRef.current) window.clearTimeout(qDebounceRef.current)
+    }
+  }, [qRaw])
+
+  const matcher = useMemo(() => createProductMatcher(q), [q])
+
+  const rows = useMemo(() => {
+    if (!matcher) return allRows ?? []
+    return (allRows ?? []).filter((p) => matcher(p))
+  }, [allRows, matcher])
+
+  const suggestions = useMemo(() => {
+    if (!q.trim()) return []
+    const base = (allRows ?? []).filter((p) => matcher?.(p))
+    const list = base.slice(0, 6)
+    return list.map((p) => ({
+      id: p.id,
+      label: `${p.name}${p.sku ? ` · ${p.sku}` : ''}`,
+      value: p.name,
+    }))
+  }, [allRows, matcher, q])
+
   return (
     <div>
       <div className="pageTitle">Products</div>
       <div className="card">
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search product or SKU"
-            style={inputStyle}
-          />
+          <div style={{ position: 'relative', flex: '1 1 220px', minWidth: 220 }}>
+            <input
+              value={qRaw}
+              onChange={(e) => {
+                setQRaw(e.target.value)
+                setShowSuggestions(true)
+              }}
+              onFocus={() => setShowSuggestions(true)}
+              onBlur={() => window.setTimeout(() => setShowSuggestions(false), 120)}
+              placeholder="Search name / SKU / brand / category / qty (e.g. 10) or /regex/"
+              style={{ ...inputStyle, width: '100%' }}
+            />
+            {showSuggestions && suggestions.length > 0 ? (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  top: 'calc(100% + 6px)',
+                  background: 'var(--card)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  zIndex: 10,
+                  boxShadow: '0 14px 40px rgba(0,0,0,0.24)',
+                }}
+              >
+                {suggestions.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="btn"
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      borderRadius: 0,
+                      border: 'none',
+                      borderBottom: '1px solid var(--border)',
+                      padding: '10px 12px',
+                      background: 'transparent',
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      setQRaw(s.value)
+                      setQ(s.value)
+                      setShowSuggestions(false)
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
           <select
             value={brandId}
             onChange={(e) => setBrandId(e.target.value)}
@@ -707,5 +781,82 @@ const inputStyle = {
   padding: '10px 12px',
   borderRadius: 10,
   outline: 'none',
+}
+
+function normalizeForSearch(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function createProductMatcher(queryRaw) {
+  const query = normalizeForSearch(queryRaw)
+  if (!query) return null
+
+  // Allow explicit regex in the form /pattern/flags
+  const regexMatch = String(queryRaw || '').trim().match(/^\/(.+)\/([gimsuy]*)$/)
+  if (regexMatch) {
+    try {
+      const re = new RegExp(regexMatch[1], regexMatch[2] || 'i')
+      return (p) => {
+        const hay = [
+          p?.name,
+          p?.sku,
+          p?.brand?.name,
+          p?.category,
+          p?.unit,
+          p?.notes,
+          String(p?.stock_total ?? ''),
+          String(p?.min_qty ?? ''),
+        ]
+          .filter(Boolean)
+          .join(' ')
+        return re.test(hay)
+      }
+    } catch {
+      // Fall back to non-regex search if invalid regex
+    }
+  }
+
+  const tokens = query.split(' ').filter(Boolean)
+  const nums = tokens.map((t) => Number(t)).filter((n) => Number.isFinite(n))
+
+  return (p) => {
+    const name = normalizeForSearch(p?.name)
+    const sku = normalizeForSearch(p?.sku)
+    const brand = normalizeForSearch(p?.brand?.name)
+    const category = normalizeForSearch(p?.category)
+    const unit = normalizeForSearch(p?.unit)
+    const notes = normalizeForSearch(p?.notes)
+    const qty = Number(p?.stock_total ?? 0)
+    const minQty = Number(p?.min_qty ?? 0)
+
+    const hay = [name, sku, brand, category, unit, notes].filter(Boolean).join(' ')
+
+    // Word-to-word / middle-word matching: every token must match somewhere in text,
+    // and numeric tokens can also match quantities.
+    for (const t of tokens) {
+      if (!t) continue
+      const n = Number(t)
+      const isNum = Number.isFinite(n) && t.replace(/[^0-9.]/g, '') === t
+      if (isNum) {
+        if (String(qty).includes(String(n)) || String(minQty).includes(String(n))) continue
+        return false
+      }
+      if (hay.includes(t)) continue
+      return false
+    }
+
+    // If query is purely numeric (e.g. "10"), also allow approximate qty match.
+    if (nums.length > 0 && tokens.length === nums.length) {
+      const target = nums[0]
+      if (Math.abs(qty - target) <= 0.000001) return true
+    }
+
+    return true
+  }
 }
 
