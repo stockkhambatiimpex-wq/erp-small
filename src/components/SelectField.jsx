@@ -6,13 +6,28 @@ export function SelectField({
   options,
   placeholder = 'Select',
   disabled = false,
+  searchable = false,
+  searchPlaceholder = 'Search…',
 }) {
   const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
   const rootRef = useRef(null)
+  const inputRef = useRef(null)
 
   const selected = useMemo(() => {
     return (options ?? []).find((o) => String(o.value) === String(value)) ?? null
   }, [options, value])
+
+  useEffect(() => {
+    if (!open) {
+      setQ('')
+      return
+    }
+    if (!searchable) return
+    // Defer focus until menu mounts.
+    const t = window.setTimeout(() => inputRef.current?.focus?.(), 0)
+    return () => window.clearTimeout(t)
+  }, [open, searchable])
 
   useEffect(() => {
     function onDoc(e) {
@@ -29,6 +44,13 @@ export function SelectField({
       document.removeEventListener('touchstart', onDoc)
     }
   }, [open])
+
+  const filteredOptions = useMemo(() => {
+    if (!searchable) return options ?? []
+    const query = String(q || '').trim().toLowerCase()
+    if (!query) return options ?? []
+    return (options ?? []).filter((o) => String(o?.label || '').toLowerCase().includes(query))
+  }, [options, q, searchable])
 
   return (
     <div className={`cselect ${disabled ? 'isDisabled' : ''}`} ref={rootRef}>
@@ -48,7 +70,22 @@ export function SelectField({
 
       {open ? (
         <div className="cselectMenu" role="listbox">
-          {(options ?? []).map((o) => {
+          {searchable ? (
+            <div style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>
+              <input
+                ref={inputRef}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={searchPlaceholder}
+                style={{ width: '100%' }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setOpen(false)
+                }}
+              />
+            </div>
+          ) : null}
+
+          {(filteredOptions ?? []).map((o) => {
             const isSel = String(o.value) === String(value)
             return (
               <button
@@ -66,6 +103,10 @@ export function SelectField({
               </button>
             )
           })}
+
+          {searchable && (filteredOptions?.length ?? 0) === 0 ? (
+            <div style={{ padding: 10, color: 'var(--muted)', fontSize: 13 }}>No matches</div>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -7,6 +7,7 @@ export function ProductsPage() {
   const { isEditor } = useAuth()
   const [qRaw, setQRaw] = useState('')
   const [q, setQ] = useState('')
+  const [searchMode, setSearchMode] = useState('all') // all | qty
   const [brandId, setBrandId] = useState('')
   const [brands, setBrands] = useState([])
   const [allRows, setAllRows] = useState([])
@@ -37,10 +38,10 @@ export function ProductsPage() {
         'id,sku,name,category,unit,min_qty,notes,warehouse_id,brand:brands(id,name),created_at',
       )
       .order('name')
-      .limit(250)
+      .limit(500)
 
+    // Search is handled client-side (fast token matching + suggestions).
     if (brandId) query.eq('brand_id', brandId)
-    // Search is handled client-side (fuzzy + qty + suggestions), so we only filter on brand server-side.
 
     const { data, error: e } = await query
     if (e) {
@@ -127,23 +128,38 @@ export function ProductsPage() {
     }
   }, [qRaw])
 
-  const matcher = useMemo(() => createProductMatcher(q), [q])
+  const indexedRows = useMemo(() => {
+    return (allRows ?? []).map((p) => ({
+      ...p,
+      _search: {
+        name: normalizeForSearch(p?.name),
+        sku: normalizeForSearch(p?.sku),
+        brand: normalizeForSearch(p?.brand?.name),
+        qtyStr: String(Number(p?.stock_total ?? 0)),
+        minQtyStr: String(Number(p?.min_qty ?? 0)),
+      },
+    }))
+  }, [allRows])
+
+  const matcher = useMemo(() => createProductMatcher(q, searchMode), [q, searchMode])
 
   const rows = useMemo(() => {
     if (!matcher) return allRows ?? []
-    return (allRows ?? []).filter((p) => matcher(p))
-  }, [allRows, matcher])
+    return (indexedRows ?? []).filter((p) => matcher(p))
+  }, [indexedRows, matcher, allRows])
 
   const suggestions = useMemo(() => {
     if (!q.trim()) return []
-    const base = (allRows ?? []).filter((p) => matcher?.(p))
+    const base = (indexedRows ?? []).filter((p) => matcher?.(p))
     const list = base.slice(0, 6)
     return list.map((p) => ({
       id: p.id,
       label: `${p.name}${p.sku ? ` · ${p.sku}` : ''}`,
       value: p.name,
     }))
-  }, [allRows, matcher, q])
+  }, [indexedRows, matcher, q])
+
+  const highlightTokens = useMemo(() => extractSearchTokens(q), [q])
 
   return (
     <div>
@@ -159,7 +175,11 @@ export function ProductsPage() {
               }}
               onFocus={() => setShowSuggestions(true)}
               onBlur={() => window.setTimeout(() => setShowSuggestions(false), 120)}
-              placeholder="Search name / SKU / brand / category / qty (e.g. 10) or /regex/"
+              placeholder={
+                searchMode === 'qty'
+                    ? 'Search quantity (e.g. 10) or /regex/'
+                    : 'Search name / SKU (e.g. 303 glue) or /regex/'
+              }
               style={{ ...inputStyle, width: '100%' }}
             />
             {showSuggestions && suggestions.length > 0 ? (
@@ -204,11 +224,12 @@ export function ProductsPage() {
               </div>
             ) : null}
           </div>
-          <select
-            value={brandId}
-            onChange={(e) => setBrandId(e.target.value)}
-            style={inputStyle}
-          >
+          <select value={searchMode} onChange={(e) => setSearchMode(e.target.value)} style={inputStyle}>
+            <option value="all">Search: Name / SKU</option>
+            <option value="qty">Search: Quantity</option>
+          </select>
+
+          <select value={brandId} onChange={(e) => setBrandId(e.target.value)} style={inputStyle}>
             {brandOptions.map((b) => (
               <option key={b.id || 'all'} value={b.id}>
                 {b.name}
@@ -242,10 +263,16 @@ export function ProductsPage() {
               <div key={p.id} className="productCard">
                 <div className="productCardTop">
                   <div style={{ minWidth: 0 }}>
-                    <div className="productName">{p.name}</div>
+                    <div className="productName">
+                      <Highlight text={p.name} tokens={searchMode === 'all' ? highlightTokens : []} />
+                    </div>
                     <div className="productMeta">
-                      <span className="pill">{p.sku || '—'}</span>
-                      <span className="pill">{p.brand?.name || '—'}</span>
+                      <span className="pill">
+                        <Highlight text={p.sku || '—'} tokens={searchMode === 'all' ? highlightTokens : []} />
+                      </span>
+                      <span className="pill">
+                        {p.brand?.name || '—'}
+                      </span>
                       <span className="pill">{p.category || '—'}</span>
                       <span className="pill">{p.unit || '—'}</span>
                     </div>
@@ -792,7 +819,7 @@ function normalizeForSearch(s) {
     .trim()
 }
 
-function createProductMatcher(queryRaw) {
+function createProductMatcherWithMode(queryRaw, mode) {
   const query = normalizeForSearch(queryRaw)
   if (!query) return null
 
@@ -802,18 +829,7 @@ function createProductMatcher(queryRaw) {
     try {
       const re = new RegExp(regexMatch[1], regexMatch[2] || 'i')
       return (p) => {
-        const hay = [
-          p?.name,
-          p?.sku,
-          p?.brand?.name,
-          p?.category,
-          p?.unit,
-          p?.notes,
-          String(p?.stock_total ?? ''),
-          String(p?.min_qty ?? ''),
-        ]
-          .filter(Boolean)
-          .join(' ')
+        const hay = getModeHaystack(p, mode)
         return re.test(hay)
       }
     } catch {
@@ -821,42 +837,63 @@ function createProductMatcher(queryRaw) {
     }
   }
 
-  const tokens = query.split(' ').filter(Boolean)
-  const nums = tokens.map((t) => Number(t)).filter((n) => Number.isFinite(n))
+  const tokens = extractSearchTokens(query)
+  if (tokens.length === 0) return null
 
   return (p) => {
-    const name = normalizeForSearch(p?.name)
-    const sku = normalizeForSearch(p?.sku)
-    const brand = normalizeForSearch(p?.brand?.name)
-    const category = normalizeForSearch(p?.category)
-    const unit = normalizeForSearch(p?.unit)
-    const notes = normalizeForSearch(p?.notes)
-    const qty = Number(p?.stock_total ?? 0)
-    const minQty = Number(p?.min_qty ?? 0)
-
-    const hay = [name, sku, brand, category, unit, notes].filter(Boolean).join(' ')
-
-    // Word-to-word / middle-word matching: every token must match somewhere in text,
-    // and numeric tokens can also match quantities.
+    const hay = getModeHaystack(p, mode)
     for (const t of tokens) {
       if (!t) continue
-      const n = Number(t)
-      const isNum = Number.isFinite(n) && t.replace(/[^0-9.]/g, '') === t
-      if (isNum) {
-        if (String(qty).includes(String(n)) || String(minQty).includes(String(n))) continue
-        return false
-      }
       if (hay.includes(t)) continue
       return false
     }
-
-    // If query is purely numeric (e.g. "10"), also allow approximate qty match.
-    if (nums.length > 0 && tokens.length === nums.length) {
-      const target = nums[0]
-      if (Math.abs(qty - target) <= 0.000001) return true
-    }
-
     return true
   }
+}
+
+function createProductMatcher(queryRaw, mode) {
+  return createProductMatcherWithMode(queryRaw, mode || 'all')
+}
+
+function getModeHaystack(p, mode) {
+  const s = p?._search
+  if (mode === 'qty') return [s?.qtyStr, s?.minQtyStr].filter(Boolean).join(' ')
+  // default: name + sku only (numeric-safe, partial via substring)
+  return [s?.name, s?.sku].filter(Boolean).join(' ')
+}
+
+function extractSearchTokens(queryOrRaw) {
+  const query = normalizeForSearch(queryOrRaw)
+  if (!query) return []
+  return query.split(' ').map((t) => t.trim()).filter(Boolean)
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function Highlight({ text, tokens }) {
+  const raw = String(text ?? '')
+  const cleanTokens = (tokens ?? []).filter(Boolean)
+  if (!raw || cleanTokens.length === 0) return raw
+
+  // Highlight is purely visual; match using a safe regex, longest tokens first.
+  const uniq = Array.from(new Set(cleanTokens)).sort((a, b) => b.length - a.length)
+  const re = new RegExp(`(${uniq.map(escapeRegExp).join('|')})`, 'ig')
+  const parts = raw.split(re)
+  return (
+    <>
+      {parts.map((part, idx) => {
+        const isHit = uniq.some((t) => part.toLowerCase() === t.toLowerCase())
+        return isHit ? (
+          <mark key={idx} style={{ background: 'rgba(250, 204, 21, 0.35)', color: 'inherit', padding: '0 2px' }}>
+            {part}
+          </mark>
+        ) : (
+          <span key={idx}>{part}</span>
+        )
+      })}
+    </>
+  )
 }
 

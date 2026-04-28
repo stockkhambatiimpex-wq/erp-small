@@ -72,7 +72,7 @@ export function ReportsPage() {
 
   const filterOptions = useMemo(() => {
     const products = (lines ?? [])
-      .map((l) => ({ id: l.product_id, name: l.name }))
+      .map((l) => ({ id: l.product_id, name: l.name, sku: l.sku }))
       .sort((a, b) => a.name.localeCompare(b.name))
     const uniqProducts = []
     const seenP = new Set()
@@ -137,9 +137,14 @@ export function ReportsPage() {
             <SelectField
               value={productId}
               onChange={(v) => setProductId(v)}
+              searchable
+              searchPlaceholder="Search product (name / SKU)"
               options={[
                 { value: '', label: 'All products' },
-                ...filterOptions.products.map((p) => ({ value: p.id, label: p.name })),
+                ...filterOptions.products.map((p) => ({
+                  value: p.id,
+                  label: `${p.name}${p.sku ? ` · ${p.sku}` : ''}`,
+                })),
               ]}
             />
           </label>
