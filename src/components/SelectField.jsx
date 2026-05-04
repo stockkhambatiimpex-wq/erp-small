@@ -19,15 +19,20 @@ export function SelectField({
   }, [options, value])
 
   useEffect(() => {
-    if (!open) {
-      setQ('')
-      return
-    }
     if (!searchable) return
     // Defer focus until menu mounts.
     const t = window.setTimeout(() => inputRef.current?.focus?.(), 0)
     return () => window.clearTimeout(t)
   }, [open, searchable])
+
+  // Clear query when closing, done during the state transition (not in an effect)
+  function toggleOpen() {
+    setOpen((v) => {
+      const next = !v
+      if (!next) setQ('')
+      return next
+    })
+  }
 
   useEffect(() => {
     function onDoc(e) {
@@ -58,7 +63,7 @@ export function SelectField({
         type="button"
         className="cselectBtn"
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         aria-haspopup="listbox"
         aria-expanded={open}
       >

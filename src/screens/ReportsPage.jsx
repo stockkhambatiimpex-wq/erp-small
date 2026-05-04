@@ -118,7 +118,7 @@ export function ReportsPage() {
               ]}
             />
           </label>
-          <label className="field" style={{ flex: '0 0 180px' }}>
+          <label className="field" style={{ flex: '1 1 180px', minWidth: 180 }}>
             <div className="label">Month</div>
             <input
               type="month"

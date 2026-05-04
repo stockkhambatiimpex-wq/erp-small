@@ -150,6 +150,7 @@ button {
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .pageTitle {
@@ -162,6 +163,7 @@ button {
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px;
+  min-width: 0;
 }
 
 /* Product cards */
@@ -169,6 +171,7 @@ button {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  min-width: 0;
 }
 .productCard {
   border: 1px solid var(--border);
@@ -179,6 +182,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
+  max-width: 100%;
 }
 .productCardTop {
   display: flex;
@@ -199,6 +204,7 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 .pill {
   border: 1px solid var(--border);
@@ -207,6 +213,8 @@ button {
   padding: 4px 8px;
   font-family: var(--mono);
   font-size: 11px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 .stockBadge {
   border: 1px solid var(--border);
@@ -232,6 +240,7 @@ button {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 .stockTotal {
   font-weight: 900;
@@ -242,11 +251,14 @@ button {
   color: var(--muted);
   font-family: var(--mono);
   font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .whChips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  min-width: 0;
 }
 .whChip {
   border: 1px solid var(--border);
@@ -257,6 +269,7 @@ button {
   color: var(--muted);
   background: transparent;
   overflow-wrap: anywhere;
+  max-width: 100%;
 }
 .whChip.has {
   color: var(--text);
@@ -311,6 +324,8 @@ button {
   background: rgba(255, 255, 255, 0.02);
   display: grid;
   gap: 10px;
+  min-width: 0;
+  overflow: hidden;
 }
 .reportTop {
   display: flex;
@@ -354,6 +369,8 @@ button {
   border-radius: 16px;
   padding: 14px;
   background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .auth {
@@ -704,7 +721,8 @@ button {
 
 }
 
-@media (max-width: 1100px) {
+/* 2-column product grid for tablets, but keep 1-column on phones */
+@media (max-width: 1100px) and (min-width: 721px) {
   .productGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -740,6 +758,11 @@ button {
   }
   .who {
     display: none;
+  }
+  /* Month/date inputs should not squeeze on mobile */
+  .card input[type='month'],
+  .card input[type='date'] {
+    width: 100%;
   }
   .auth {
     place-items: center;
@@ -787,8 +810,24 @@ button {
   .stockTotal {
     font-size: 17px;
   }
-  .btn {
+  .productStockLine {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  /* Monthly report cards: keep numbers readable */
+  .reportNumbers {
+    grid-template-columns: 1fr;
+  }
+  .reportTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  /* Full-width primary actions in page content (not in topbar) */
+  .content .btnPrimary {
     width: 100%;
+  }
+  .topbar .btn {
+    width: auto;
   }
   .productActions {
     justify-content: stretch;

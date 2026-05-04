@@ -95,8 +95,9 @@ export function DashboardPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
             gap: 12,
+            minWidth: 0,
           }}
         >
           <Kpi label="Products" value={stats.products} accent="var(--accent)" />
@@ -168,13 +169,31 @@ function BarList({ items }) {
               background: 'rgba(255,255,255,0.02)',
               display: 'grid',
               gap: 8,
+              minWidth: 0,
+              overflow: 'hidden',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <div style={{ fontWeight: 800, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, minWidth: 0, flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  fontWeight: 800,
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  flex: '1 1 200px',
+                }}
+              >
                 {i.name}
               </div>
-              <div style={{ fontFamily: 'var(--mono)', color }}>
+              <div
+                style={{
+                  fontFamily: 'var(--mono)',
+                  color,
+                  flex: '0 0 auto',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {value >= 0 ? '+' : ''}
                 {value.toLocaleString('en-IN')} {i.unit || ''}
               </div>

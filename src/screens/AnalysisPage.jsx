@@ -333,7 +333,7 @@ export function AnalysisPage() {
             />
           </label>
 
-          <label className="field" style={{ flex: '0 0 170px' }}>
+          <label className="field" style={{ flex: '1 1 170px', minWidth: 170 }}>
             <div className="label">From</div>
             <input
               type="date"
@@ -345,7 +345,7 @@ export function AnalysisPage() {
               }}
             />
           </label>
-          <label className="field" style={{ flex: '0 0 170px' }}>
+          <label className="field" style={{ flex: '1 1 170px', minWidth: 170 }}>
             <div className="label">To</div>
             <input
               type="date"
@@ -528,14 +528,22 @@ function PieChart({ data }) {
       </div>
       <div style={{ display: 'grid', gap: 6, flex: '1 1 220px', minWidth: 0 }}>
         {(data ?? []).map((d, i) => (
-          <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+          <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
               <div style={{ width: 10, height: 10, borderRadius: 3, background: colors[i % colors.length] }} />
-              <div style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div
+                style={{
+                  color: 'var(--text)',
+                  minWidth: 0,
+                  overflowWrap: 'anywhere',
+                  whiteSpace: 'normal',
+                  flex: '1 1 auto',
+                }}
+              >
                 {d.label}
               </div>
             </div>
-            <div style={{ fontFamily: 'var(--mono)', color: 'var(--muted)' }}>
+            <div style={{ fontFamily: 'var(--mono)', color: 'var(--muted)', flex: '0 0 auto', whiteSpace: 'nowrap' }}>
               {Number(d.value || 0).toLocaleString('en-IN')}
             </div>
           </div>
