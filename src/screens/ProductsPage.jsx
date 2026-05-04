@@ -32,18 +32,31 @@ export function ProductsPage() {
   async function loadProducts() {
     setError('')
     setBusy(true)
-    const query = supabase
-      .from('products')
-      .select(
-        'id,sku,name,category,unit,min_qty,notes,warehouse_id,brand:brands(id,name),created_at',
-      )
-      .order('name')
-      .limit(500)
+    async function fetchProducts(selectColumns) {
+      const query = supabase
+        .from('products')
+        .select(selectColumns)
+        .order('name')
+        .limit(500)
 
-    // Search is handled client-side (fast token matching + suggestions).
-    if (brandId) query.eq('brand_id', brandId)
+      // Search is handled client-side (fast token matching + suggestions).
+      if (brandId) query.eq('brand_id', brandId)
 
-    const { data, error: e } = await query
+      return await query
+    }
+
+    const selectV2 =
+      'id,sku,name,category,unit,is_divisible,sub_unit,sub_unit_per_unit,min_qty,notes,warehouse_id,brand:brands(id,name),created_at'
+    const selectV1 =
+      'id,sku,name,category,unit,min_qty,notes,warehouse_id,brand:brands(id,name),created_at'
+
+    let data
+    let e
+    ;({ data, error: e } = await fetchProducts(selectV2))
+    if (e && /is_divisible|sub_unit|sub_unit_per_unit/i.test(e.message || '')) {
+      // DB not migrated yet — fallback to old schema so the app keeps working.
+      ;({ data, error: e } = await fetchProducts(selectV1))
+    }
     if (e) {
       setBusy(false)
       setError(e.message)
@@ -259,6 +272,8 @@ export function ProductsPage() {
             const total = Number(p.stock_total || 0)
             const min = Number(p.min_qty || 0)
             const isLow = min > 0 && total < min
+            const displayUnit = (p.is_divisible ? p.sub_unit : p.unit) || ''
+            const perRoll = Number(p.sub_unit_per_unit || 0)
             return (
               <div key={p.id} className="productCard">
                 <div className="productCardTop">
@@ -274,8 +289,14 @@ export function ProductsPage() {
                         {p.brand?.name || '—'}
                       </span>
                       <span className="pill">{p.category || '—'}</span>
-                      <span className="pill">{p.unit || '—'}</span>
+                      <span className="pill">{`Unit: ${p.unit || '—'}`}</span>
+                      <span className="pill">{`Stock in: ${displayUnit || '—'}`}</span>
                     </div>
+                    {p.is_divisible && perRoll > 0 ? (
+                      <div className="helpText" style={{ marginTop: 6 }}>
+                        1 {p.unit} = {perRoll.toLocaleString('en-IN')} {p.sub_unit || 'Sq m'}
+                      </div>
+                    ) : null}
                   </div>
                   <div className={`stockBadge ${isLow ? 'low' : 'ok'}`}>
                     {isLow ? 'Low' : 'OK'}
@@ -284,19 +305,22 @@ export function ProductsPage() {
 
                 <div className="productStockLine">
                   <div className="stockTotal">
-                    {total.toLocaleString('en-IN')} {p.unit || ''}
+                    {total.toLocaleString('en-IN')} {displayUnit}
                   </div>
                   <div className="stockMin">
-                    Min: {min.toLocaleString('en-IN')}
+                    Min: {min.toLocaleString('en-IN')} {displayUnit}
                   </div>
                 </div>
 
                 <div className="whChips">
                   {(warehouses ?? []).map((w) => {
                     const q = Number(p.stock_by_warehouse?.[w.id] || 0)
+                    const hasPer = p.is_divisible && perRoll > 0
+                    const rollEq = hasPer ? q / perRoll : 0
                     return (
                       <div key={w.id} className={`whChip ${q > 0 ? 'has' : ''}`}>
-                        {w.name}: {q}
+                        {w.name}: {q.toLocaleString('en-IN')} {displayUnit}
+                        {hasPer ? ` (${rollEq.toLocaleString('en-IN')} ${p.unit})` : ''}
                       </div>
                     )
                   })}
@@ -342,6 +366,7 @@ export function ProductsPage() {
       {modal.open ? (
         <ProductModal
           brands={brands}
+          warehouses={warehouses}
           mode={modal.mode}
           item={modal.item}
           onClose={() => setModal({ open: false, mode: 'add', item: null })}
@@ -379,15 +404,20 @@ const CATEGORY_OPTIONS = [
   'Other',
 ]
 
-function ProductModal({ brands, mode, item, onClose, onSaved }) {
+function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
   const { isEditor } = useAuth()
   const [sku, setSku] = useState(item?.sku || '')
   const [name, setName] = useState(item?.name || '')
   const [category, setCategory] = useState(item?.category || '')
   const [unit, setUnit] = useState(item?.unit || 'Pcs')
+  const [isDivisible, setIsDivisible] = useState(Boolean(item?.is_divisible))
+  const [subUnitPerUnit, setSubUnitPerUnit] = useState(item?.sub_unit_per_unit ?? '')
   const [minQty, setMinQty] = useState(item?.min_qty ?? 0)
   const [notes, setNotes] = useState(item?.notes || '')
   const [brandId, setBrandId] = useState(item?.brand?.id || '')
+  const [initWarehouseId, setInitWarehouseId] = useState('')
+  const [initQty, setInitQty] = useState('')
+  const [initQtyMode, setInitQtyMode] = useState('base') // base | unit (for divisible)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -398,12 +428,40 @@ function ProductModal({ brands, mode, item, onClose, onSaved }) {
       setError('Product name is required.')
       return
     }
+    if (unit === 'Rolls' && isDivisible) {
+      const sqm = Number(subUnitPerUnit)
+      if (!Number.isFinite(sqm) || sqm <= 0) {
+        setError('Sq m per roll is required and must be greater than 0.')
+        return
+      }
+    }
+    if (mode === 'add' && initQty) {
+      const q = Number(initQty)
+      if (!Number.isFinite(q) || q < 0) {
+        setError('Initial quantity must be 0 or more.')
+        return
+      }
+      if (q > 0 && !initWarehouseId) {
+        setError('Select a warehouse for initial stock.')
+        return
+      }
+      if (q > 0 && unit === 'Rolls' && isDivisible && initQtyMode === 'unit') {
+        const sqm = Number(subUnitPerUnit)
+        if (!Number.isFinite(sqm) || sqm <= 0) {
+          setError('Set "Sq m per roll" before entering initial qty in rolls.')
+          return
+        }
+      }
+    }
     setBusy(true)
-    const payload = {
+    const payloadV2 = {
       sku: sku.trim() || null,
       name: name.trim(),
       category: category.trim() || null,
       unit,
+      is_divisible: unit === 'Rolls' ? Boolean(isDivisible) : false,
+      sub_unit: unit === 'Rolls' && isDivisible ? 'Sq m' : null,
+      sub_unit_per_unit: unit === 'Rolls' && isDivisible ? Number(subUnitPerUnit) : null,
       min_qty: Number(minQty || 0),
       notes: notes.trim() || null,
       brand_id: brandId || null,
@@ -411,10 +469,56 @@ function ProductModal({ brands, mode, item, onClose, onSaved }) {
       warehouse_id: null,
     }
 
-    const res =
-      mode === 'edit'
-        ? await supabase.from('products').update(payload).eq('id', item.id)
-        : await supabase.from('products').insert(payload)
+    const payloadV1 = {
+      sku: payloadV2.sku,
+      name: payloadV2.name,
+      category: payloadV2.category,
+      unit: payloadV2.unit,
+      min_qty: payloadV2.min_qty,
+      notes: payloadV2.notes,
+      brand_id: payloadV2.brand_id,
+      warehouse_id: payloadV2.warehouse_id,
+    }
+
+    let res
+    if (mode === 'edit') {
+      res = await supabase.from('products').update(payloadV2).eq('id', item.id)
+    } else {
+      res = await supabase.from('products').insert(payloadV2).select('id').single()
+    }
+
+    if (res.error && /is_divisible|sub_unit|sub_unit_per_unit/i.test(res.error.message || '')) {
+      // DB not migrated yet — save without new columns.
+      if (mode === 'edit') {
+        res = await supabase.from('products').update(payloadV1).eq('id', item.id)
+      } else {
+        res = await supabase.from('products').insert(payloadV1).select('id').single()
+      }
+    }
+
+    const createdId = mode === 'add' ? res.data?.id : item?.id
+    if (!res.error && mode === 'add' && createdId && initWarehouseId && Number(initQty || 0) > 0) {
+      const raw = Number(initQty || 0)
+      const factor =
+        unit === 'Rolls' && isDivisible && initQtyMode === 'unit'
+          ? Number(subUnitPerUnit)
+          : 1
+      const qtyBase = raw * factor
+      const { error: mErr } = await supabase.from('stock_movements').insert([
+        {
+          product_id: createdId,
+          warehouse_id: initWarehouseId,
+          type: 'add',
+          qty: qtyBase,
+          remark: 'Initial stock',
+        },
+      ])
+      if (mErr) {
+        setBusy(false)
+        setError(mErr.message)
+        return
+      }
+    }
 
     setBusy(false)
     if (res.error) {
@@ -479,19 +583,118 @@ function ProductModal({ brands, mode, item, onClose, onSaved }) {
           <div className="label">Unit</div>
           <SelectField
             value={unit}
-            onChange={(v) => setUnit(v)}
-            options={['Pcs', 'Bags', 'Litres', 'Kgs', 'Rolls', 'Boxes', 'Drums', 'Sheets', 'Bundle'].map(
-              (u) => ({ value: u, label: u }),
-            )}
+            onChange={(v) => {
+              setUnit(v)
+              if (v !== 'Rolls') {
+                setIsDivisible(false)
+                setSubUnitPerUnit('')
+              }
+            }}
+            options={[
+              'Pcs',
+              'Bags',
+              'Litres',
+              'Kgs',
+              'Rolls',
+              'Bucket',
+              'Boards',
+              'Ply',
+              'Boxes',
+              'Drums',
+              'Sheets',
+              'Bundle',
+            ].map((u) => ({ value: u, label: u }))}
           />
         </label>
       </div>
+      {unit === 'Rolls' ? (
+        <div className="modalGrid2">
+          <label className="field">
+            <div className="label">Divisible?</div>
+            <SelectField
+              value={isDivisible ? 'yes' : 'no'}
+              onChange={(v) => {
+                const yes = v === 'yes'
+                setIsDivisible(yes)
+                if (!yes) setSubUnitPerUnit('')
+              }}
+              options={[
+                { value: 'no', label: 'No (track as full rolls)' },
+                { value: 'yes', label: 'Yes (track by Sq m)' },
+              ]}
+            />
+          </label>
+          <label className="field">
+            <div className="label">Sq m per roll</div>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              disabled={!isDivisible}
+              value={subUnitPerUnit}
+              onChange={(e) => setSubUnitPerUnit(e.target.value)}
+              placeholder="e.g. 5.8"
+            />
+          </label>
+        </div>
+      ) : null}
+
+      {mode === 'add' ? (
+        <>
+          <div style={{ height: 6 }} />
+          <div className="sectionTitle">Initial stock (optional)</div>
+          <div className="helpText">
+            Set opening stock while creating a product. You can also use the <span style={{ fontFamily: 'var(--mono)' }}>+</span> button later.
+          </div>
+          <div className="modalGrid2">
+            <label className="field">
+              <div className="label">Warehouse</div>
+              <SelectField
+                value={initWarehouseId}
+                onChange={(v) => setInitWarehouseId(v)}
+                options={[
+                  { value: '', label: 'Select' },
+                  ...(warehouses ?? []).map((w) => ({ value: w.id, label: w.name })),
+                ]}
+              />
+            </label>
+            <label className="field">
+              <div className="label">Quantity</div>
+              <input
+                type="number"
+                min={0}
+                step={unit === 'Rolls' && isDivisible && initQtyMode === 'base' ? '0.01' : '1'}
+                value={initQty}
+                onChange={(e) => setInitQty(e.target.value)}
+                placeholder="0"
+              />
+            </label>
+          </div>
+          {unit === 'Rolls' && isDivisible ? (
+            <div className="modalGrid2">
+              <label className="field">
+                <div className="label">Enter qty in</div>
+                <SelectField
+                  value={initQtyMode}
+                  onChange={(v) => setInitQtyMode(v)}
+                  options={[
+                    { value: 'base', label: 'Sq m' },
+                    { value: 'unit', label: 'Rolls' },
+                  ]}
+                />
+              </label>
+              <div />
+            </div>
+          ) : null}
+        </>
+      ) : null}
       <div className="modalGrid2">
         <label className="field">
           <div className="label">Min level</div>
           <input
             type="number"
             min={0}
+            step={unit === 'Rolls' && isDivisible ? '0.01' : '1'}
             value={minQty}
             onChange={(e) => setMinQty(e.target.value)}
           />
@@ -528,6 +731,7 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
   const [ops, setOps] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [qtyMode, setQtyMode] = useState('base') // base | unit (only meaningful for divisible)
 
   useEffect(() => {
     let cancelled = false
@@ -583,11 +787,21 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
       return
     }
     setError('')
+    const perUnit = Number(product?.sub_unit_per_unit)
+    const isDiv = Boolean(product?.is_divisible)
+    const factor = isDiv && qtyMode === 'unit' ? perUnit : 1
+    if (isDiv && qtyMode === 'unit') {
+      if (!Number.isFinite(perUnit) || perUnit <= 0) {
+        setError('This product is divisible, but "Sq m per roll" is missing. Edit the product and set it.')
+        return
+      }
+    }
     const movements = []
     for (const o of ops ?? []) {
       if (!o?.warehouse_id) continue
       if (!o.touched) continue
-      const val = Number(o.qty || 0)
+      const raw = Number(o.qty || 0)
+      const val = raw * factor
       if (!Number.isFinite(val) || val < 0) {
         setError('Quantity must be 0 or more.')
         return
@@ -632,8 +846,34 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
     <Modal title={`Adjust stock · ${product.name}`} onClose={onClose}>
       {error ? <div className="error">{error}</div> : null}
       <div style={{ color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-        Total stock (all warehouses): {Number(totals.total || 0).toLocaleString('en-IN')}
+        Total stock (all warehouses): {Number(totals.total || 0).toLocaleString('en-IN')}{' '}
+        {(product?.is_divisible ? product?.sub_unit : product?.unit) || ''}
+        {product?.is_divisible && Number(product?.sub_unit_per_unit) > 0 ? (
+          <span>
+            {' '}
+            · 1 {product?.unit} = {Number(product?.sub_unit_per_unit).toLocaleString('en-IN')} {product?.sub_unit || 'Sq m'}
+          </span>
+        ) : null}
       </div>
+      {product?.is_divisible ? (
+        <div style={{ height: 10 }} />
+      ) : null}
+      {product?.is_divisible ? (
+        <div className="modalGrid2">
+          <label className="field">
+            <div className="label">Enter qty in</div>
+            <SelectField
+              value={qtyMode}
+              onChange={(v) => setQtyMode(v)}
+              options={[
+                { value: 'base', label: product?.sub_unit || 'Sq m' },
+                { value: 'unit', label: product?.unit || 'Rolls' },
+              ]}
+            />
+          </label>
+          <div />
+        </div>
+      ) : null}
       <div style={{ height: 10 }} />
       <div style={{ display: 'grid', gap: 10 }}>
         {(warehouses ?? []).map((w) => {
@@ -666,7 +906,14 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
               >
                 <div style={{ fontWeight: 900 }}>{w.name}</div>
                 <div style={{ color: 'var(--muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>
-                  Current: {Number(current || 0).toLocaleString('en-IN')}
+                  Current: {Number(current || 0).toLocaleString('en-IN')}{' '}
+                  {(product?.is_divisible ? product?.sub_unit : product?.unit) || ''}
+                  {product?.is_divisible && Number(product?.sub_unit_per_unit) > 0 ? (
+                    <span>
+                      {' '}
+                      ({(Number(current || 0) / Number(product?.sub_unit_per_unit)).toLocaleString('en-IN')} {product?.unit})
+                    </span>
+                  ) : null}
                 </div>
               </div>
 
@@ -694,6 +941,7 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
                   <input
                     type="number"
                     min={0}
+                    step={product?.is_divisible && qtyMode === 'base' ? '0.01' : '1'}
                     value={o.qty}
                     onChange={(e) =>
                       setOps((prev) =>

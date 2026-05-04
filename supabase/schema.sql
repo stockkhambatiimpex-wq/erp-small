@@ -80,7 +80,11 @@ create table if not exists public.products (
   brand_id uuid references public.brands (id) on delete set null,
   category text,
   unit text not null default 'Pcs',
-  min_qty integer not null default 0,
+  -- If true, stock movements are tracked in sub_unit (e.g. Sq m) instead of unit (e.g. Rolls)
+  is_divisible boolean not null default false,
+  sub_unit text,
+  sub_unit_per_unit numeric,
+  min_qty numeric not null default 0,
   notes text,
   active boolean not null default true,
   created_at timestamptz not null default now()
@@ -122,7 +126,7 @@ create table if not exists public.stock_movements (
   product_id uuid not null references public.products (id) on delete cascade,
   warehouse_id uuid not null references public.warehouses (id) on delete cascade,
   type public.movement_type not null,
-  qty integer not null check (qty >= 0),
+  qty numeric not null check (qty >= 0),
   remark text,
   created_by uuid not null default auth.uid(),
   created_at timestamptz not null default now()
@@ -184,7 +188,7 @@ returns table (
   products bigint,
   brands bigint,
   warehouses bigint,
-  units bigint,
+  units numeric,
   low bigint
 )
 language sql
@@ -221,10 +225,11 @@ returns table (
   name text,
   category text,
   unit text,
+  display_unit text,
   brand_name text,
-  qty_in bigint,
-  qty_out bigint,
-  net bigint
+  qty_in numeric,
+  qty_out numeric,
+  net numeric
 )
 language sql
 stable
@@ -235,6 +240,7 @@ as $$
     p.name,
     p.category,
     p.unit,
+    case when p.is_divisible then coalesce(p.sub_unit, p.unit) else p.unit end as display_unit,
     b.name as brand_name,
     coalesce(sum(case when m.type = 'add' then m.qty when m.type = 'set' then greatest(m.qty - coalesce(prev.qty,0), 0) else 0 end),0) as qty_in,
     coalesce(sum(case when m.type = 'sub' then m.qty when m.type = 'set' then greatest(coalesce(prev.qty,0) - m.qty, 0) else 0 end),0) as qty_out,
@@ -262,7 +268,7 @@ as $$
     limit 1
   ) prev on true
   where p.active = true
-  group by p.id, p.sku, p.name, p.category, p.unit, b.name
+  group by p.id, p.sku, p.name, p.category, p.unit, p.is_divisible, p.sub_unit, b.name
   order by p.name asc;
 $$;
 

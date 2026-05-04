@@ -12,7 +12,7 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    if (user) nav('/', { replace: true })
+    if (user) nav('/dashboard', { replace: true })
   }, [user, nav])
 
   async function onSubmit(e) {
@@ -28,7 +28,7 @@ export function LoginPage() {
       setError(signInError.message)
       return
     }
-    nav('/', { replace: true })
+    nav('/dashboard', { replace: true })
   }
 
   return (

@@ -30,6 +30,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 a {
@@ -97,6 +98,7 @@ button {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 .who {
   text-align: right;
@@ -147,6 +149,7 @@ button {
   padding: 18px;
   max-width: 1200px;
   width: 100%;
+  margin: 0 auto;
 }
 
 .pageTitle {
@@ -228,6 +231,7 @@ button {
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .stockTotal {
   font-weight: 900;
@@ -252,6 +256,7 @@ button {
   font-size: 11px;
   color: var(--muted);
   background: transparent;
+  overflow-wrap: anywhere;
 }
 .whChip.has {
   color: var(--text);
@@ -260,6 +265,16 @@ button {
 }
 .productNotes {
   color: var(--muted);
+}
+.sectionTitle {
+  margin-top: 6px;
+  font-weight: 950;
+  letter-spacing: -0.2px;
+}
+.helpText {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 .productActions {
   display: flex;
@@ -601,7 +616,7 @@ button {
   max-width: 100%;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 860px) {
   .modalGrid2 {
     grid-template-columns: 1fr;
   }
@@ -614,10 +629,6 @@ button {
     align-items: stretch;
   }
 
-  .productGrid {
-    grid-template-columns: 1fr;
-  }
-
   .reportMobileList {
     display: grid;
     gap: 10px;
@@ -627,6 +638,12 @@ button {
   }
 
   .analysisGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .productGrid {
     grid-template-columns: 1fr;
   }
 }
@@ -685,6 +702,9 @@ button {
     margin-top: 0;
   }
 
+}
+
+@media (max-width: 1100px) {
   .productGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -692,9 +712,6 @@ button {
 
 @media (max-width: 980px) {
   /* Treat small tablets like mobile for layout stability */
-  .productGrid {
-    grid-template-columns: 1fr;
-  }
   .analysisGrid {
     grid-template-columns: 1fr;
   }
@@ -718,6 +735,12 @@ button {
 }
 
 @media (max-width: 520px) {
+  .topbar {
+    min-height: 56px;
+  }
+  .who {
+    display: none;
+  }
   .auth {
     place-items: center;
     padding-top: 16px;
@@ -751,6 +774,28 @@ button {
   .btnIcon {
     width: 40px;
     height: 40px;
+  }
+}
+
+@media (max-width: 420px) {
+  .content {
+    padding: 10px 12px 12px;
+  }
+  .card {
+    padding: 12px;
+  }
+  .stockTotal {
+    font-size: 17px;
+  }
+  .btn {
+    width: 100%;
+  }
+  .productActions {
+    justify-content: stretch;
+  }
+  .productActions .btnIcon {
+    flex: 1 1 0;
+    width: auto;
   }
 }
 

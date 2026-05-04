@@ -184,6 +184,7 @@ export function ReportsPage() {
             const qtyIn = Number(l.qty_in || 0)
             const qtyOut = Number(l.qty_out || 0)
             const net = Number(l.net || 0)
+            const unit = l.display_unit || l.unit
             return (
               <div key={l.product_id} className="reportCard">
                 <div className="reportTop">
@@ -191,7 +192,7 @@ export function ReportsPage() {
                     <div className="reportName">{l.name}</div>
                     <div className="reportSub">
                       <span className="pill">{l.sku || '—'}</span>
-                      <span className="pill">{l.unit || '—'}</span>
+                      <span className="pill">{unit || '—'}</span>
                       {(l.brand_name || '').trim() ? (
                         <span className="pill">{(l.brand_name || '').trim()}</span>
                       ) : null}
@@ -265,7 +266,7 @@ export function ReportsPage() {
                       {l.category ? ` · ${l.category}` : ''}
                     </div>
                   </Td>
-                  <Td muted>{l.unit}</Td>
+                  <Td muted>{l.display_unit || l.unit}</Td>
                   <Td style={{ color: 'var(--ok)', fontFamily: 'var(--mono)' }}>
                     {Number(l.qty_in || 0).toLocaleString('en-IN')}
                   </Td>

@@ -64,7 +64,7 @@ export function DashboardPage() {
         .map((l) => ({
           product_id: l.product_id,
           name: l.name,
-          unit: l.unit,
+          unit: l.display_unit || l.unit,
           net: Number(l.net || 0),
           qty_in: Number(l.qty_in || 0),
           qty_out: Number(l.qty_out || 0),
