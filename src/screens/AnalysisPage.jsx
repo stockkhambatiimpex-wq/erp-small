@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { useAuth } from '../state/AuthProvider.jsx'
+import { useDataSync } from '../state/DataSyncProvider.jsx'
 import { SelectField } from '../components/SelectField.jsx'
 
 function isoDate(d) {
@@ -47,6 +48,7 @@ function downloadText(filename, text) {
 
 export function AnalysisPage() {
   const { isEditor } = useAuth()
+  const { revision } = useDataSync()
 
   const [warehouses, setWarehouses] = useState([])
   const [brands, setBrands] = useState([])
@@ -89,7 +91,7 @@ export function AnalysisPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [revision])
 
   const filteredProductIds = useMemo(() => {
     const out = []
@@ -150,7 +152,7 @@ export function AnalysisPage() {
     return () => {
       cancelled = true
     }
-  }, [brandId, filteredProductIds, from, productId, to, warehouseId])
+  }, [brandId, filteredProductIds, from, productId, to, warehouseId, revision])
 
   const stockByProduct = useMemo(() => {
     const map = new Map()

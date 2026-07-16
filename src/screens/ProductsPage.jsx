@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { useAuth } from '../state/AuthProvider.jsx'
+import { useDataSync } from '../state/DataSyncProvider.jsx'
 import { SelectField } from '../components/SelectField.jsx'
 
 export function ProductsPage() {
   const { isEditor } = useAuth()
+  const { notifyChange } = useDataSync()
   const [qRaw, setQRaw] = useState('')
   const [q, setQ] = useState('')
   const [searchMode, setSearchMode] = useState('all') // all | qty
@@ -27,6 +29,36 @@ export function ProductsPage() {
     ])
     setBrands(b ?? [])
     setWarehouses(w ?? [])
+  }
+
+  function patchProductStock(productId, stockByWarehouse) {
+    const byWarehouse = stockByWarehouse ?? {}
+    let total = 0
+    for (const qty of Object.values(byWarehouse)) total += Number(qty || 0)
+    setAllRows((rows) =>
+      (rows ?? []).map((r) =>
+        r.id === productId
+          ? { ...r, stock_total: total, stock_by_warehouse: byWarehouse }
+          : r,
+      ),
+    )
+  }
+
+  async function refreshProductStock(productId) {
+    const { data, error: e } = await supabase
+      .from('v_current_stock')
+      .select('warehouse_id,qty')
+      .eq('product_id', productId)
+    if (e) {
+      setError(e.message)
+      return null
+    }
+    const byWarehouse = {}
+    for (const row of data ?? []) {
+      if (row.warehouse_id) byWarehouse[row.warehouse_id] = Number(row.qty || 0)
+    }
+    patchProductStock(productId, byWarehouse)
+    return byWarehouse
   }
 
   async function loadProducts() {
@@ -114,7 +146,64 @@ export function ProductsPage() {
       setError(e.message)
       return
     }
-    loadProducts()
+    setAllRows((rows) => (rows ?? []).filter((r) => r.id !== product.id))
+    notifyChange('products')
+  }
+
+  function applySavedProduct(saved) {
+    if (!saved?.id) {
+      loadProducts()
+      notifyChange('products')
+      return
+    }
+    const brand = brands.find((b) => b.id === saved.brand_id) || null
+    const next = {
+      id: saved.id,
+      sku: saved.sku,
+      name: saved.name,
+      category: saved.category,
+      unit: saved.unit,
+      is_divisible: saved.is_divisible,
+      sub_unit: saved.sub_unit,
+      sub_unit_per_unit: saved.sub_unit_per_unit,
+      min_qty: saved.min_qty,
+      notes: saved.notes,
+      warehouse_id: saved.warehouse_id ?? null,
+      brand: brand ? { id: brand.id, name: brand.name } : null,
+      created_at: saved.created_at,
+      stock_total: saved.stock_total ?? 0,
+      stock_by_warehouse: saved.stock_by_warehouse ?? {},
+    }
+
+    if (saved.mode === 'edit') {
+      setAllRows((rows) =>
+        (rows ?? []).map((r) =>
+          r.id === saved.id
+            ? {
+                ...r,
+                ...next,
+                stock_total: r.stock_total,
+                stock_by_warehouse: r.stock_by_warehouse,
+                created_at: r.created_at,
+              }
+            : r,
+        ),
+      )
+    } else {
+      const matchesBrand = !brandId || saved.brand_id === brandId
+      if (matchesBrand) {
+        setAllRows((rows) => {
+          const list = rows ?? []
+          if (list.some((r) => r.id === saved.id)) {
+            return list.map((r) => (r.id === saved.id ? { ...r, ...next } : r))
+          }
+          return [...list, next].sort((a, b) =>
+            String(a.name || '').localeCompare(String(b.name || '')),
+          )
+        })
+      }
+    }
+    notifyChange('products')
   }
 
   useEffect(() => {
@@ -370,9 +459,9 @@ export function ProductsPage() {
           mode={modal.mode}
           item={modal.item}
           onClose={() => setModal({ open: false, mode: 'add', item: null })}
-          onSaved={() => {
+          onSaved={(saved) => {
             setModal({ open: false, mode: 'add', item: null })
-            loadProducts()
+            applySavedProduct(saved)
           }}
         />
       ) : null}
@@ -382,8 +471,10 @@ export function ProductsPage() {
           product={adj.product}
           warehouses={warehouses}
           onClose={() => setAdj({ open: false, product: null })}
-          onApplied={() => {
+          onApplied={async (productId) => {
             setAdj({ open: false, product: null })
+            await refreshProductStock(productId)
+            notifyChange('stock')
           }}
         />
       ) : null}
@@ -482,21 +573,23 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
 
     let res
     if (mode === 'edit') {
-      res = await supabase.from('products').update(payloadV2).eq('id', item.id)
+      res = await supabase.from('products').update(payloadV2).eq('id', item.id).select('*').single()
     } else {
-      res = await supabase.from('products').insert(payloadV2).select('id').single()
+      res = await supabase.from('products').insert(payloadV2).select('*').single()
     }
 
     if (res.error && /is_divisible|sub_unit|sub_unit_per_unit/i.test(res.error.message || '')) {
       // DB not migrated yet — save without new columns.
       if (mode === 'edit') {
-        res = await supabase.from('products').update(payloadV1).eq('id', item.id)
+        res = await supabase.from('products').update(payloadV1).eq('id', item.id).select('*').single()
       } else {
-        res = await supabase.from('products').insert(payloadV1).select('id').single()
+        res = await supabase.from('products').insert(payloadV1).select('*').single()
       }
     }
 
     const createdId = mode === 'add' ? res.data?.id : item?.id
+    let stock_by_warehouse = {}
+    let stock_total = 0
     if (!res.error && mode === 'add' && createdId && initWarehouseId && Number(initQty || 0) > 0) {
       const raw = Number(initQty || 0)
       const factor =
@@ -518,6 +611,8 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
         setError(mErr.message)
         return
       }
+      stock_by_warehouse = { [initWarehouseId]: qtyBase }
+      stock_total = qtyBase
     }
 
     setBusy(false)
@@ -526,7 +621,14 @@ function ProductModal({ brands, warehouses, mode, item, onClose, onSaved }) {
       return
     }
 
-    onSaved()
+    onSaved({
+      mode,
+      id: createdId,
+      ...res.data,
+      brand_id: res.data?.brand_id ?? (brandId || null),
+      stock_by_warehouse,
+      stock_total,
+    })
   }
 
   return (
@@ -839,7 +941,7 @@ function AdjustModal({ product, warehouses, onClose, onApplied }) {
       setError(e.message)
       return
     }
-    onApplied()
+    onApplied(product.id)
   }
 
   return (

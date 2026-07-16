@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { SelectField } from '../components/SelectField.jsx'
+import { useDataSync } from '../state/DataSyncProvider.jsx'
 
 function monthKey(date) {
   const y = date.getFullYear()
@@ -9,6 +10,7 @@ function monthKey(date) {
 }
 
 export function ReportsPage() {
+  const { revision } = useDataSync()
   const [warehouses, setWarehouses] = useState([])
   const [warehouseId, setWarehouseId] = useState('')
   const [month, setMonth] = useState(monthKey(new Date()))
@@ -34,7 +36,7 @@ export function ReportsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [revision])
 
   const range = useMemo(() => {
     const [y, m] = month.split('-').map(Number)
@@ -68,7 +70,7 @@ export function ReportsPage() {
     return () => {
       cancelled = true
     }
-  }, [warehouseId, range.start, range.end])
+  }, [warehouseId, range.start, range.end, revision])
 
   const filterOptions = useMemo(() => {
     const products = (lines ?? [])

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
+import { useDataSync } from '../state/DataSyncProvider.jsx'
 
 function monthKey(date) {
   const y = date.getFullYear()
@@ -8,6 +9,7 @@ function monthKey(date) {
 }
 
 export function DashboardPage() {
+  const { revision } = useDataSync()
   const [warehouses, setWarehouses] = useState([])
   const [stats, setStats] = useState({
     products: 0,
@@ -35,7 +37,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [revision])
 
   const range = useMemo(() => {
     const [y, m] = month.split('-').map(Number)
@@ -77,7 +79,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true
     }
-  }, [range.end, range.start])
+  }, [range.end, range.start, revision])
 
   const warehouseNames = useMemo(
     () => warehouses.map((w) => w.name).join(' • '),

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient.js'
 import { useAuth } from '../state/AuthProvider.jsx'
+import { useDataSync } from '../state/DataSyncProvider.jsx'
 
 export function WarehousesPage() {
   const { isEditor } = useAuth()
+  const { notifyChange } = useDataSync()
   const [items, setItems] = useState([])
   const [name, setName] = useState('')
   const [error, setError] = useState('')
@@ -30,28 +32,51 @@ export function WarehousesPage() {
     setError('')
     const n = name.trim()
     if (!n) return
-    const { error: e } = await supabase.from('warehouses').insert({ name: n })
+    const { data, error: e } = await supabase
+      .from('warehouses')
+      .insert({ name: n })
+      .select('id,name,created_at')
+      .single()
     if (e) {
       setError(e.message)
       return
     }
     setName('')
-    load()
+    if (data) {
+      setItems((prev) =>
+        [...(prev ?? []), data].sort((a, b) =>
+          String(a.name || '').localeCompare(String(b.name || '')),
+        ),
+      )
+    }
+    notifyChange('warehouses')
   }
 
   async function renameWarehouse(id, newName) {
     if (!isEditor) return
     const n = String(newName || '').trim()
     if (!n) return
+    const current = items.find((w) => w.id === id)
+    if (current && current.name === n) return
     setError('')
     setBusyId(id)
-    const { error: e } = await supabase.from('warehouses').update({ name: n }).eq('id', id)
+    const { data, error: e } = await supabase
+      .from('warehouses')
+      .update({ name: n })
+      .eq('id', id)
+      .select('id,name,created_at')
+      .single()
     setBusyId('')
     if (e) {
       setError(e.message)
       return
     }
-    load()
+    setItems((prev) =>
+      (prev ?? [])
+        .map((w) => (w.id === id ? { ...w, ...(data ?? { name: n }) } : w))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''))),
+    )
+    notifyChange('warehouses')
   }
 
   async function deleteWarehouse(id) {
@@ -68,7 +93,8 @@ export function WarehousesPage() {
       setError(e.message)
       return
     }
-    load()
+    setItems((prev) => (prev ?? []).filter((w) => w.id !== id))
+    notifyChange('warehouses')
   }
 
   return (
@@ -112,6 +138,7 @@ export function WarehousesPage() {
               <div style={{ display: 'grid', gap: 6, flex: '1 1 260px', minWidth: 0 }}>
                 {isEditor ? (
                   <input
+                    key={`${w.id}:${w.name}`}
                     defaultValue={w.name}
                     disabled={busyId === w.id}
                     onBlur={(e) => renameWarehouse(w.id, e.target.value)}
@@ -170,4 +197,3 @@ const inputStyle = {
   borderRadius: 10,
   outline: 'none',
 }
-
